@@ -16,16 +16,16 @@ class Vector:
 
 # Initialize MediaPipe Hand Tracking
 mp_hands = mp.solutions.hands
-hands = mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.5)
+hands = mp_hands.Hands(min_detection_confidence=0.5, min_tracking_confidence=0.8)
 mp_drawing = mp.solutions.drawing_utils
 
 # Set up Matplotlib for visualization
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
-serial_port = 'COM15'  # Update with your port
-baud_rate = 115200
-ser = serial.Serial(serial_port, baud_rate, timeout=1)
+# serial_port = 'COM15'  # Update with your port
+# baud_rate = 115200
+# ser = serial.Serial(serial_port, baud_rate, timeout=1)
 
 # Function to extract landmark coordinates
 def get_landmark_coords(hand_landmarks, landmark_index):
@@ -76,7 +76,7 @@ def calculate_angle_3(hand_landmarks,a,b,c,d,root,thumb = False):
 fingers = {'index' : [5,6,7,8],
 'middle' : [9,10,11,12],
 'ring' : [13,14,15,16],
-# 'pinky' : [17,18,19,20],
+ 'pinky' : [17,18,19,20],
 }
 
 def calculate_angle_to_plane(lm1, lm2, lm3,lm4):
@@ -153,7 +153,9 @@ def finger(stx, sty, stz, segment_length, degrees, bending_angle, thumb=False):
 a = []
 # Open webcam
 cap = cv2.VideoCapture(0)
-previous_angles = {'index': 0, 'middle': 0, 'ring': 0, 'palecbend': 0, 'palecrot': 0}
+previous_angles = {'index': 0, 'middle': 0, 'ring': 0, 'pinky':0, 'palecbend': 0, 'palecrot': 0}
+angles_now = {'index': 0, 'middle': 0, 'ring': 0, 'pinky':0,'palecbend': 0, 'palecrot': 0}
+last_real_thumb = -160
 while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
@@ -167,6 +169,7 @@ while cap.isOpened():
             mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
             figner_dict = {}
+            
 
             for i in fingers:
                 angle = calculate_angle_3(
@@ -178,7 +181,9 @@ while cap.isOpened():
                     hand_landmarks.landmark[0]
                 ) 
                 value_for_servo = int(np.round(np.clip(180 * angle / 79, 0, 180)))
+                angles_now[i] = value_for_servo
                 figner_dict[i] = value_for_servo-previous_angles[i]
+                
 
 
             # Thumb
@@ -189,6 +194,7 @@ while cap.isOpened():
                 thumb=True
             )
             figner_dict['palecbend'] = int(np.round(np.clip(180 * anglethumb / 79, 0, 180)))-previous_angles['palecbend']
+            angles_now['palecbend'] = int(np.round(np.clip(180 * anglethumb / 79, 0, 180)))
 
             thumb_root_angle = calculate_angle_to_plane(
                 hand_landmarks.landmark[0], hand_landmarks.landmark[5],
@@ -200,26 +206,19 @@ while cap.isOpened():
             )
             thumb_root_mean = np.mean([thumb_root_angle, thumb_root_angle2])
             
-            if thumb_root_mean > 15:
-                if previous_angles['palecrot'] != 160:
-                    figner_dict['palecrot'] = 160 
-                else:
-                    figner_dict['palecrot'] = 0
+            if thumb_root_mean > 30:
+                angles_now['palecrot'] = 1
             else:
-                if previous_angles['palecrot'] != -160:
-                    figner_dict['palecrot'] = -160 
-                else:
-                    figner_dict['palecrot'] = 0
+                
+                angles_now['palecrot'] = 0
+
 
 
             # --- SERIAL SEND ---
             json_data = json.dumps(figner_dict)
-            ser.write((json_data + "\n").encode())  # newline = end of message
-            print("Sent:", json_data)
-            line = ser.readline().decode(errors="ignore").strip()
-            if line:
-                print("ESP32:", line)
-            previous_angles = figner_dict.copy()
+            print(angles_now)  
+            
+            previous_angles = angles_now.copy()
             time.sleep(0.25)
 
     cv2.imshow("Hand Tracking", frame)
