@@ -4,19 +4,52 @@ import mediapipe as mp
 import matplotlib.pyplot as plt
 import time
 import serial
+import serial.tools.list_ports
 import struct
 import keyboard
 import math
 import json
 import threading
 
+def find_serial_port():
+    """Find and return the first available serial port"""
+    ports = serial.tools.list_ports.comports()
+    
+    if not ports:
+        print("No serial ports found!")
+        return None
+    
+    print("Available serial ports:")
+    for i, port in enumerate(ports):
+        print(f"  {i+1}. {port.device} - {port.description}")
+    
+    # Try to find ESP32 or Arduino-like device
+    for port in ports:
+        if any(keyword in port.description.lower() for keyword in ['usb', 'serial', 'ch340', 'cp210', 'ftdi', 'esp32', 'arduino']):
+            print(f"Auto-selected: {port.device} - {port.description}")
+            return port.device
+    
+    # If no specific device found, use the first available port
+    selected_port = ports[0].device
+    print(f"Using first available port: {selected_port}")
+    return selected_port
+
 def main():
-    # Replace with your serial port (e.g., COM3 for Windows or /dev/ttyUSB0 for Linux)
-    SERIAL_PORT = 'COM14'
     BAUD_RATE = 115200
 
+    # Find available serial port
+    SERIAL_PORT = find_serial_port()
+    if SERIAL_PORT is None:
+        print("No serial port available. Please connect your device and try again.")
+        return
+
     # Set up the serial connection
-    ser = serial.Serial(SERIAL_PORT, BAUD_RATE)
+    try:
+        ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+        print(f"Connected to {SERIAL_PORT} at {BAUD_RATE} baud")
+    except serial.SerialException as e:
+        print(f"Failed to connect to {SERIAL_PORT}: {e}")
+        return
     
     # Current angles for all fingers (0-180 degrees)
     current_angles = {
@@ -135,6 +168,10 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print("\nProgram interrupted by user")
             break
+        except serial.SerialException as e:
+            print(f"Serial connection error: {e}")
+            print("Please check your device connection and try again.")
+            time.sleep(2)  # Wait before retrying
         except Exception as e:
             print(f"An error occurred: {e}")
             time.sleep(1)  # Wait before retrying
