@@ -24,7 +24,7 @@ def find_esp32_port():
     
     # Try COM22 first (preferred)
     for port in ports:
-        if 'COM22' in port.device:
+        if 'COM23' in port.device:
             try:
                 ser = serial.Serial(port.device, 115200, timeout=1)
                 print(f"Connected to ESP32 on {port.device}")
